@@ -3,7 +3,7 @@ name: Build Lexi26 APK
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, v2-rebuild ]
 
 permissions:
   contents: read
@@ -12,40 +12,31 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
-
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
+      - uses: android-actions/setup-android@v4
         with:
           packages: 'platform-tools platforms;android-35 build-tools;35.0.0'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-
       - name: Build debug APK
         run: gradle assembleDebug
-
-      - name: Verify APK signature, alignment, and package metadata
+      - name: Verify APK and launcher metadata
         run: |
           APK=app/build/outputs/apk/debug/app-debug.apk
           $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs "$APK"
           $ANDROID_HOME/build-tools/35.0.0/zipalign -c -v 4 "$APK"
           $ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK" | tee apk-metadata.txt
           $ANDROID_HOME/build-tools/35.0.0/aapt dump xmltree "$APK" AndroidManifest.xml > manifest-tree.txt
-
-      - name: Upload APK and package diagnostics
+          grep -q 'com.lexi26.app.MainActivityV2' manifest-tree.txt
+      - name: Upload APK and metadata
         uses: actions/upload-artifact@v4
         with:
-          name: Lexi26-debug-apk
+          name: Lexi26-v2-debug-apk
           path: |
             app/build/outputs/apk/debug/app-debug.apk
             apk-metadata.txt
@@ -57,14 +48,11 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     steps:
-      - name: Download built APK
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: Lexi26-debug-apk
+          name: Lexi26-v2-debug-apk
           path: test-apk
-
-      - name: Install and launch on Android 15 emulator
-        id: emulator
+      - name: Install and launch v2 on Android 15
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -76,27 +64,24 @@ jobs:
           script: |
             set -o pipefail
             mkdir -p diagnostics
-            adb devices -l | tee diagnostics/adb-devices-before.txt
-            adb install -r test-apk/app/build/outputs/apk/debug/app-debug.apk 2>&1 | tee diagnostics/install-output.txt
-            adb shell am start -n com.lexi26.app/.MainActivity 2>&1 | tee diagnostics/launch-output.txt
+            adb devices -l | tee diagnostics/devices.txt
+            adb install -r test-apk/app/build/outputs/apk/debug/app-debug.apk 2>&1 | tee diagnostics/install.txt
+            adb shell am start -n com.lexi26.app/.MainActivityV2 2>&1 | tee diagnostics/launch.txt
             sleep 5
             adb shell dumpsys activity activities > diagnostics/activity.txt
             grep -q 'com.lexi26.app' diagnostics/activity.txt
-
-      - name: Collect emulator diagnostics even after failure
+      - name: Collect diagnostics after success or failure
         if: always()
         run: |
           mkdir -p diagnostics
-          adb devices -l > diagnostics/adb-devices-after.txt 2>&1 || true
+          adb devices -l > diagnostics/devices-after.txt 2>&1 || true
           adb -s emulator-5554 logcat -d -t 3000 > diagnostics/logcat.txt 2>&1 || true
           adb -s emulator-5554 shell dumpsys package com.lexi26.app > diagnostics/package.txt 2>&1 || true
-          adb -s emulator-5554 shell getprop > diagnostics/getprop.txt 2>&1 || true
-
-      - name: Upload installation diagnostics
+      - name: Upload emulator diagnostics
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: Lexi26-install-diagnostics
+          name: Lexi26-v2-install-diagnostics
           path: diagnostics/
           if-no-files-found: warn
           retention-days: 14
