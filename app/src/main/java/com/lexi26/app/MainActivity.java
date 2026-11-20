@@ -91,7 +91,8 @@ public class MainActivity extends Activity {
       content.addView(text("계획 기간 "+daysLeft+"일 · 하루 신규 "+perDay+"개 · 기간 내 학습 가능량 "+(daysLeft*perDay)+"개",15));
       content.addView(text("주의: A1~C2 선택은 학습 목표 기록용이며, 기본 팩은 공식 CEFR 전체 어휘 목록이 아닌 자체 구성 입문 어휘입니다.",13));
     }
-\n    void add(){content.addView(text("새 단어 등록",21));EditText language=field("언어 (예: 영어, 프랑스어, 일본어)");EditText word=field("단어 / 표현");EditText meaning=field("뜻");EditText example=field("예문 (선택)");
+
+    void add(){content.addView(text("새 단어 등록",21));EditText language=field("언어 (예: 영어, 프랑스어, 일본어)");EditText word=field("단어 / 표현");EditText meaning=field("뜻");EditText example=field("예문 (선택)");
       content.addView(button("저장하기",()->{String l=val(language),w=val(word),m=val(meaning);if(l.isEmpty()||w.isEmpty()||m.isEmpty()){toast("언어, 단어, 뜻을 입력하세요.");return;}db.add(l,w,m,val(example));toast("단어를 저장했습니다.");tab="단어장";show();}));
       content.addView(button("예시 단어 12개 추가",()->{String[][] s={{"영어","ephemeral","덧없는, 일시적인"},{"영어","ubiquitous","어디에나 있는"},{"영어","ambiguous","모호한"},{"영어","resilient","회복력 있는"},{"프랑스어","éphémère","덧없는"},{"프랑스어","pourtant","그럼에도 불구하고"},{"프랑스어","néanmoins","그럼에도"},{"프랑스어","épanouir","꽃피우다"},{"일본어","曖昧","애매함, 모호함"},{"일본어","懐かしい","그리운"},{"일본어","穏やか","온화한"},{"일본어","努力","노력"}};for(String[] x:s)db.add(x[0],x[1],x[2],"");toast("예시 단어를 추가했습니다.");show();}));
     }
