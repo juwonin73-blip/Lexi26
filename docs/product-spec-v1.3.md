@@ -67,3 +67,35 @@ The data model and provider interfaces support multilingual packs from the begin
 - The current v1.1 app has manual word entry and SQLite progress only. This specification describes the next version; it does not claim these features are already implemented.
 - The current Android app has no network permission. Pack download will require a carefully scoped network permission and must remain optional; all study functionality must work offline after import.
 - Validate Android SDK/Gradle build and test on a device before distributing a new APK.
+
+
+## Goal setup and daily vocabulary schedule (confirmed product direction)
+The in-app goal setup must let the learner choose:
+- Study language.
+- Current vocabulary level (prefer a short placement test; allow self-assessment as fallback).
+- Target proficiency level and/or a named qualification exam (e.g. DELF, TOEIC, JLPT, where supported).
+- Target exam/qualification date.
+- Daily available study time.
+
+Keep proficiency target and qualification target as distinct fields. A CEFR level is not itself a certification, and vocabulary count alone does not guarantee exam readiness. Use exam-specific, sourced vocabulary inventories when available; otherwise clearly label the app's vocabulary estimate and its methodology.
+
+### Final vocabulary target
+- Compute the target inventory size from the selected language + target level/exam + supported inventory version.
+- Estimate already-known words through placement/recognition testing.
+- New vocabulary remaining = max(0, target inventory size - known eligible lemmas).
+- Deduplicate by language + normalized lemma + part of speech, and handle inflectional forms as metadata rather than counting every form as a separate headword unless the chosen inventory explicitly does so.
+- Show the source, version/date, and confidence/coverage of the target count.
+
+### Daily new-word curve
+Do not use an unbounded exponential increase in daily new words. It creates an unsustainable late-stage workload and ignores the review burden.
+Use an exponential ramp-up that approaches a sustainable daily cap, then remains near that cap. For day t:
+  ramp(t) = n_min + (n_cap - n_min) * (1 - exp(-k*t))
+  daily_new(t) = min(n_cap, max(0, round(ramp(t))))
+Here n_min is the gentle starting quota, n_cap is the sustainable new-word ceiling derived from the user's daily time budget and observed review load, and k controls the adaptation speed.
+The planner must then reconcile the schedule against the remaining target and deadline: if the sum of feasible daily quotas cannot cover the remaining vocabulary by the target date, show the shortfall and offer realistic alternatives (more daily time, later date, or smaller target) instead of silently inflating the quota.
+After the ramp-up, keep new words approximately stable; adjust downward when due reviews/backlog exceed capacity. Adjust upward only after sustained evidence that the learner can handle the extra workload.
+Track new words and due reviews separately. Estimate total daily minutes, including reviews, and keep the daily workload within the learner's stated time budget where possible.
+A future version may compare a simple capped ramp with logistic/adaptive alternatives using actual completion and recall data, but the first implementation should be deterministic, explainable, and testable.
+
+### Goal dashboard
+Display: target vocabulary count, known count, remaining count, deadline, projected completion date, today's new-word quota, today's due reviews, estimated study minutes, and whether the goal is on track. Explain when the plan changes.
