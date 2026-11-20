@@ -39,18 +39,32 @@ jobs:
           APK=app/build/outputs/apk/debug/app-debug.apk
           $ANDROID_HOME/build-tools/35.0.0/apksigner verify --verbose --print-certs "$APK"
           $ANDROID_HOME/build-tools/35.0.0/zipalign -c -v 4 "$APK"
-          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK"
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump badging "$APK" | tee apk-metadata.txt
+          $ANDROID_HOME/build-tools/35.0.0/aapt dump xmltree "$APK" AndroidManifest.xml > manifest-tree.txt
 
-      # Upload immediately after build/verification so emulator failures never block APK delivery.
-      - name: Upload APK
+      - name: Upload APK and package diagnostics
         uses: actions/upload-artifact@v4
         with:
           name: Lexi26-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            apk-metadata.txt
+            manifest-tree.txt
           if-no-files-found: error
           retention-days: 30
 
+  emulator-test:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download built APK
+        uses: actions/download-artifact@v4
+        with:
+          name: Lexi26-debug-apk
+          path: test-apk
+
       - name: Install and launch on Android 15 emulator
+        id: emulator
         uses: reactivecircus/android-emulator-runner@v2
         with:
           api-level: 35
@@ -60,7 +74,29 @@ jobs:
           emulator-options: -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect -no-snapshot -wipe-data
           disable-animations: true
           script: |
-            adb install app/build/outputs/apk/debug/app-debug.apk
-            adb shell am start -n com.lexi26.app/.MainActivity
+            set -o pipefail
+            mkdir -p diagnostics
+            adb devices -l | tee diagnostics/adb-devices-before.txt
+            adb install -r test-apk/app/build/outputs/apk/debug/app-debug.apk 2>&1 | tee diagnostics/install-output.txt
+            adb shell am start -n com.lexi26.app/.MainActivity 2>&1 | tee diagnostics/launch-output.txt
             sleep 5
-            adb shell dumpsys activity activities | grep -q 'com.lexi26.app'
+            adb shell dumpsys activity activities > diagnostics/activity.txt
+            grep -q 'com.lexi26.app' diagnostics/activity.txt
+
+      - name: Collect emulator diagnostics even after failure
+        if: always()
+        run: |
+          mkdir -p diagnostics
+          adb devices -l > diagnostics/adb-devices-after.txt 2>&1 || true
+          adb -s emulator-5554 logcat -d -t 3000 > diagnostics/logcat.txt 2>&1 || true
+          adb -s emulator-5554 shell dumpsys package com.lexi26.app > diagnostics/package.txt 2>&1 || true
+          adb -s emulator-5554 shell getprop > diagnostics/getprop.txt 2>&1 || true
+
+      - name: Upload installation diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lexi26-install-diagnostics
+          path: diagnostics/
+          if-no-files-found: warn
+          retention-days: 14
