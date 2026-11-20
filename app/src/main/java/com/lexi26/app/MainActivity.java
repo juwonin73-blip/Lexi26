@@ -27,9 +27,9 @@ public class MainActivity extends Activity {
     void show(){root=new LinearLayout(this);root.setOrientation(1);root.setPadding(dp(18),dp(18),dp(18),dp(12));root.setBackgroundColor(0xfff7f7fb);setContentView(root);
       TextView title=text("Lexi26",28);title.setTypeface(null,Typeface.BOLD);title.setTextColor(0xff5146d8);root.addView(title);
       root.addView(text("다국어 단어 암기 · 오프라인 학습",13));
-      LinearLayout nav=new LinearLayout(this);for(String s:new String[]{"학습","단어장","추가","통계"})nav.addView(button(s,()->{tab=s;show();}),new LinearLayout.LayoutParams(0,dp(52),1));root.addView(nav);
+      LinearLayout nav=new LinearLayout(this);for(String s:new String[]{"학습","단어장","목표","추가","통계"})nav.addView(button(s,()->{tab=s;show();}),new LinearLayout.LayoutParams(0,dp(52),1));root.addView(nav);
       ScrollView scroll=new ScrollView(this);content=new LinearLayout(this);content.setOrientation(1);content.setPadding(0,dp(14),0,dp(14));scroll.addView(content);root.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-      if(tab.equals("학습"))study();else if(tab.equals("추가"))add();else if(tab.equals("단어장"))list();else stats();
+      if(tab.equals("학습"))study();else if(tab.equals("추가"))add();else if(tab.equals("단어장"))list();else if(tab.equals("목표"))goals();else stats();
     }
     void study(){
       content.addView(text("전체 "+db.count()+"개   ·   암기 완료 "+db.known()+"개",16));
@@ -60,7 +60,38 @@ public class MainActivity extends Activity {
     void startTimer(){stopTimer();seconds=26;flipped=false;tick=new Runnable(){public void run(){if(seconds>0){timer.setText("다음 카드까지 "+seconds+"초");seconds--;handler.postDelayed(this,1000);}else{flipped=true;if(pos<queue.size()){Word w=queue.get(pos);timer.setText("뜻: "+w.meaning+"  ·  3초 뒤 다음 단어");}renderActiveCard();tick=new Runnable(){public void run(){pos++;flipped=false;if(pos>=queue.size()){timer.setText("자동 스키밍 완료");stopTimer();return;}renderActiveCard();seconds=26;startTimer();}};handler.postDelayed(tick,3000);}}};timer.setText("첫 단어 · 26초");handler.postDelayed(tick,1000);}
     void renderActiveCard(){if(activeCard!=null)renderCard(activeCard);}
     void stopTimer(){if(tick!=null)handler.removeCallbacks(tick);tick=null;}
-    void add(){content.addView(text("새 단어 등록",21));EditText language=field("언어 (예: 영어, 프랑스어, 일본어)");EditText word=field("단어 / 표현");EditText meaning=field("뜻");EditText example=field("예문 (선택)");
+
+    void goals(){
+      content.addView(text("학습 목표 설정",22));
+      content.addView(text("학습 언어와 목표 수준을 선택하세요. 기본 어휘 팩은 오프라인으로 제공됩니다.",14));
+      String[] langs={"영어","프랑스어"}; Spinner lang=new Spinner(this);
+      lang.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,langs));
+      String saved=getPreferences(0).getString("goal_language","프랑스어"); lang.setSelection(saved.equals("영어")?0:1);
+      content.addView(text("학습 언어",16)); content.addView(lang);
+      String[] levels={"A1","A2","B1","B2","C1","C2"};
+      Spinner current=new Spinner(this); current.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,levels));
+      content.addView(text("현재 수준",16)); content.addView(current);
+      Spinner target=new Spinner(this); target.setAdapter(new ArrayAdapter<>(this,android.R.layout.simple_spinner_dropdown_item,levels)); target.setSelection(2);
+      content.addView(text("목표 수준",16)); content.addView(target);
+      EditText days=field("목표까지 남은 일수 (예: 180)"); days.setInputType(2); days.setText(getPreferences(0).getString("goal_days","180"));
+      EditText daily=field("하루 신규 단어 목표 (예: 10)"); daily.setInputType(2); daily.setText(getPreferences(0).getString("daily_new","10"));
+      content.addView(button("목표 저장",()->{
+        String d=val(days),n=val(daily);
+        if(d.isEmpty()||n.isEmpty()){toast("일수와 일일 단어 수를 입력하세요.");return;}
+        try { if(Integer.parseInt(d)<1||Integer.parseInt(n)<1) throw new NumberFormatException(); }
+        catch(Exception ex){toast("일수와 일일 단어 수는 1 이상이어야 합니다.");return;}
+        getPreferences(0).edit().putString("goal_language",lang.getSelectedItem().toString()).putString("goal_current",current.getSelectedItem().toString()).putString("goal_target",target.getSelectedItem().toString()).putString("goal_days",d).putString("daily_new",n).apply();
+        toast("학습 목표를 저장했습니다.");show();
+      }));
+      String gl=getPreferences(0).getString("goal_language","프랑스어");
+      int total=db.words(gl,false).size();
+      int daysLeft=Integer.parseInt(getPreferences(0).getString("goal_days","180"));
+      int perDay=Integer.parseInt(getPreferences(0).getString("daily_new","10"));
+      content.addView(text("현재 "+gl+" 기본 어휘 팩: "+total+"개",17));
+      content.addView(text("계획 기간 "+daysLeft+"일 · 하루 신규 "+perDay+"개 · 기간 내 학습 가능량 "+(daysLeft*perDay)+"개",15));
+      content.addView(text("주의: A1~C2 선택은 학습 목표 기록용이며, 기본 팩은 공식 CEFR 전체 어휘 목록이 아닌 자체 구성 입문 어휘입니다.",13));
+    }
+\n    void add(){content.addView(text("새 단어 등록",21));EditText language=field("언어 (예: 영어, 프랑스어, 일본어)");EditText word=field("단어 / 표현");EditText meaning=field("뜻");EditText example=field("예문 (선택)");
       content.addView(button("저장하기",()->{String l=val(language),w=val(word),m=val(meaning);if(l.isEmpty()||w.isEmpty()||m.isEmpty()){toast("언어, 단어, 뜻을 입력하세요.");return;}db.add(l,w,m,val(example));toast("단어를 저장했습니다.");tab="단어장";show();}));
       content.addView(button("예시 단어 12개 추가",()->{String[][] s={{"영어","ephemeral","덧없는, 일시적인"},{"영어","ubiquitous","어디에나 있는"},{"영어","ambiguous","모호한"},{"영어","resilient","회복력 있는"},{"프랑스어","éphémère","덧없는"},{"프랑스어","pourtant","그럼에도 불구하고"},{"프랑스어","néanmoins","그럼에도"},{"프랑스어","épanouir","꽃피우다"},{"일본어","曖昧","애매함, 모호함"},{"일본어","懐かしい","그리운"},{"일본어","穏やか","온화한"},{"일본어","努力","노력"}};for(String[] x:s)db.add(x[0],x[1],x[2],"");toast("예시 단어를 추가했습니다.");show();}));
     }
@@ -77,7 +108,33 @@ public class MainActivity extends Activity {
     void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
     @Override protected void onDestroy(){stopTimer();if(tts!=null)tts.shutdown();super.onDestroy();}
     static class DB extends SQLiteOpenHelper{
-      DB(Context c){super(c,"lexi26.db",null,2);}
+
+      DB(Context c){super(c,"lexi26.db",null,3);}
+      @Override public void onOpen(SQLiteDatabase d){
+        super.onOpen(d);
+        Cursor x=d.rawQuery("SELECT COUNT(*) FROM words",null); x.moveToFirst(); int n=x.getInt(0); x.close();
+        if(n==0) seed(d);
+      }
+      void seed(SQLiteDatabase d){
+        String[][] en={
+          {"hello","안녕하세요"},{"goodbye","안녕히 가세요"},{"please","부디, 제발"},{"thank you","감사합니다"},{"yes","네"},{"no","아니요"},{"water","물"},{"food","음식"},{"bread","빵"},{"house","집"},
+          {"school","학교"},{"book","책"},{"friend","친구"},{"family","가족"},{"mother","어머니"},{"father","아버지"},{"day","날"},{"night","밤"},{"today","오늘"},{"tomorrow","내일"},
+          {"to be","~이다, 있다"},{"to have","가지다"},{"to go","가다"},{"to come","오다"},{"to eat","먹다"},{"to drink","마시다"},{"to speak","말하다"},{"to read","읽다"},{"to write","쓰다"},{"to learn","배우다"},
+          {"big","큰"},{"small","작은"},{"good","좋은"},{"bad","나쁜"},{"beautiful","아름다운"},{"happy","행복한"},{"sad","슬픈"},{"fast","빠른"},{"slow","느린"},{"important","중요한"}
+        };
+        String[][] fr={
+          {"bonjour","안녕하세요"},{"au revoir","안녕히 가세요"},{"merci","감사합니다"},{"s'il vous plaît","부탁합니다"},{"oui","네"},{"non","아니요"},{"eau","물"},{"nourriture","음식"},{"pain","빵"},{"maison","집"},
+          {"école","학교"},{"livre","책"},{"ami","친구"},{"famille","가족"},{"mère","어머니"},{"père","아버지"},{"jour","날"},{"nuit","밤"},{"aujourd’hui","오늘"},{"demain","내일"},
+          {"être","~이다, 있다"},{"avoir","가지다"},{"aller","가다"},{"venir","오다"},{"manger","먹다"},{"boire","마시다"},{"parler","말하다"},{"lire","읽다"},{"écrire","쓰다"},{"apprendre","배우다"},
+          {"grand","큰"},{"petit","작은"},{"bon","좋은"},{"mauvais","나쁜"},{"beau","아름다운"},{"heureux","행복한"},{"triste","슬픈"},{"rapide","빠른"},{"lent","느린"},{"important","중요한"}
+        };
+        for(String[] a:en) seedOne(d,"영어",a[0],a[1]);
+        for(String[] a:fr) seedOne(d,"프랑스어",a[0],a[1]);
+      }
+      void seedOne(SQLiteDatabase d,String l,String w,String m){
+        ContentValues v=new ContentValues(); v.put("language",l); v.put("word",w); v.put("meaning",m); v.put("example",""); v.put("level",0); v.put("due",System.currentTimeMillis()); d.insert("words",null,v);
+      }
+
       public void onCreate(SQLiteDatabase d){d.execSQL("CREATE TABLE words(id INTEGER PRIMARY KEY AUTOINCREMENT,language TEXT,word TEXT,meaning TEXT,example TEXT,level INTEGER DEFAULT 0,repetitions INTEGER DEFAULT 0,interval_days INTEGER DEFAULT 0,due INTEGER DEFAULT 0,ease REAL DEFAULT 2.5)");d.execSQL("CREATE TABLE reviews(id INTEGER PRIMARY KEY AUTOINCREMENT,word_id INTEGER,reviewed_at INTEGER)");}
       public void onUpgrade(SQLiteDatabase d,int o,int n){if(o<2){d.execSQL("ALTER TABLE words ADD COLUMN repetitions INTEGER DEFAULT 0");d.execSQL("ALTER TABLE words ADD COLUMN interval_days INTEGER DEFAULT 0");d.execSQL("ALTER TABLE words ADD COLUMN due INTEGER DEFAULT 0");d.execSQL("ALTER TABLE words ADD COLUMN ease REAL DEFAULT 2.5");d.execSQL("CREATE TABLE IF NOT EXISTS reviews(id INTEGER PRIMARY KEY AUTOINCREMENT,word_id INTEGER,reviewed_at INTEGER)");}}
       void add(String l,String w,String m,String e){ContentValues v=new ContentValues();v.put("language",l);v.put("word",w);v.put("meaning",m);v.put("example",e);v.put("level",0);v.put("due",System.currentTimeMillis());getWritableDatabase().insert("words",null,v);}
